@@ -1,7 +1,11 @@
 ﻿using CLP = CommandLineParser;
 using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
+using System.Threading.Tasks;
+using Toggl_Exist.Toggl;
 
 namespace Toggl_Exist
 {
@@ -27,7 +31,8 @@ namespace Toggl_Exist
 
                 Main(new ConfigurationBuilder()
                     .AddJsonFile(config.Value.FullName, true)
-                    .Build());
+                    .Build(), LoadConfig(config.Value.FullName))
+                    .Wait();
             }
             catch (CLP.Exceptions.CommandLineException e)
             {
@@ -35,9 +40,26 @@ namespace Toggl_Exist
             }
         }
 
-        static void Main(IConfigurationRoot config)
+        static JObject LoadConfig(string fileName)
         {
-            // TODO:
+            using (StreamReader reader = File.OpenText(fileName))
+            {
+                return (JObject)JToken.ReadFrom(new JsonTextReader(reader));
+            }
+        }
+
+        static async Task Main(IConfigurationRoot config, JObject configJson)
+        {
+            var toggl = config.GetSection("Toggl");
+            var timeEntries = await new Query(toggl["ApiToken"], toggl["Workspace"]).GetDetails();
+
+            var tzOffset = configJson["TimeZoneOffset"].Value<int>();
+
+            foreach (var timeEntry in timeEntries)
+            {
+                var day = timeEntry.start.AddMinutes(tzOffset).Date;
+                Console.WriteLine($"{day} : {timeEntry.start.TimeOfDay}-{timeEntry.end.TimeOfDay} : {timeEntry.project}/{timeEntry.description} : {String.Join(", ", timeEntry.tags)}");
+            }
         }
     }
 }
