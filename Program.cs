@@ -4,7 +4,9 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
+using Toggl_Exist.Matching;
 using Toggl_Exist.Toggl;
 
 namespace Toggl_Exist
@@ -54,11 +56,24 @@ namespace Toggl_Exist
             var timeEntries = await new Query(toggl["ApiToken"], toggl["Workspace"]).GetDetails();
 
             var tzOffset = configJson["TimeZoneOffset"].Value<int>();
+            var rules = configJson["Rules"].Select(rule => new Rule(rule));
 
             foreach (var timeEntry in timeEntries)
             {
                 var day = timeEntry.start.AddMinutes(tzOffset).Date;
-                Console.WriteLine($"{day} : {timeEntry.start.TimeOfDay}-{timeEntry.end.TimeOfDay} : {timeEntry.project}/{timeEntry.description} : {String.Join(", ", timeEntry.tags)}");
+                var matched = false;
+                foreach (var rule in rules)
+                {
+                    if (rule.IsMatch(JObject.FromObject(timeEntry)))
+                    {
+                        matched = true;
+                        Console.WriteLine($"{day} : {timeEntry.start.TimeOfDay}-{timeEntry.end.TimeOfDay} : {timeEntry.project}/{timeEntry.description} : {String.Join(", ", timeEntry.tags)} --> {rule.Pattern["$set"].ToString(Formatting.None)}");
+                    }
+                }
+                if (!matched)
+                {
+                    Console.WriteLine($"{day} : {timeEntry.start.TimeOfDay}-{timeEntry.end.TimeOfDay} : {timeEntry.project}/{timeEntry.description} : {String.Join(", ", timeEntry.tags)}");
+                }
             }
         }
     }
