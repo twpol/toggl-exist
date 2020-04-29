@@ -60,6 +60,10 @@ namespace Toggl_Exist.Matching
                             }
                             return value.Children().Any(cv => IsMatch(prop.Value, cv));
                         }
+                        if (prop.Name.StartsWith("$not"))
+                        {
+                            return !IsMatch(prop.Value, value);
+                        }
                         if (prop.Name.StartsWith("$"))
                         {
                             throw new InvalidOperationException($"Expected valid operator; got {prop.Name}");
