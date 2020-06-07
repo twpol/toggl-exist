@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.WebUtilities;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -25,7 +26,7 @@ namespace Toggl_Exist.Toggl
             Workspace = workspace;
         }
 
-        internal async Task<JObject> Get(string type, Dictionary<string, string> query)
+        internal async Task<JToken> Get(string type, IDictionary<string, string> query)
         {
             var uri = new Uri(
                 Endpoint +
@@ -45,15 +46,21 @@ namespace Toggl_Exist.Toggl
             request.Headers.UserAgent.Clear();
             request.Headers.UserAgent.Add(ProductInfoHeaderValue.Parse(UserAgent));
             request.Headers.Authorization = new AuthenticationHeaderValue("basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{Token}:api_token")));
+
             var response = await Client.SendAsync(request);
             var text = await response.Content.ReadAsStringAsync();
-            return JObject.Parse(text);
+            return JToken.Parse(text);
         }
 
-        public async Task<IReadOnlyList<TimeEntry>> GetDetails()
+        public async Task<IReadOnlyList<TimeEntry>> GetDetails(IReadOnlyList<string> matchingTags)
         {
             var response = await Get("details", new Dictionary<string, string>());
-            return response["data"].ToObject<TimeEntry[]>();
+            var entries = response["data"].ToObject<List<TimeEntry>>();
+            foreach (var entry in entries)
+            {
+                entry.matchingTags = entry.tags.Where(tag => matchingTags.Contains(tag, StringComparer.CurrentCultureIgnoreCase)).ToList();
+            }
+            return entries;
         }
     }
 }

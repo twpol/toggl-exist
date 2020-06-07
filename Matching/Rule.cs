@@ -34,6 +34,10 @@ namespace Toggl_Exist.Matching
                     {
                         return new Regex(pattern["$regex"].ToObject<string>()).IsMatch(value.ToObject<string>());
                     }
+                    if (pattern["$empty"] != null)
+                    {
+                        return pattern["$empty"].ToObject<bool>() == (value.Children().Count() == 0);
+                    }
                     return pattern.Children().OfType<JProperty>().All(prop =>
                     {
                         if (prop.Name.StartsWith("$and"))
