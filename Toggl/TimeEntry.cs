@@ -8,6 +8,7 @@ namespace Toggl_Exist.Toggl
         public string project;
         public string description;
         public IReadOnlyList<string> tags;
+        public IReadOnlyList<string> matchingTags;
         public DateTimeOffset start;
         public DateTimeOffset end;
     }
