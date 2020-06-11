@@ -32,7 +32,7 @@ namespace Toggl_Exist.Matching
                 case JTokenType.Object:
                     if (pattern["$regex"] != null)
                     {
-                        return new Regex(pattern["$regex"].ToObject<string>()).IsMatch(value.ToObject<string>());
+                        return new Regex(pattern["$regex"].ToObject<string>(), RegexOptions.IgnoreCase).IsMatch(value.ToObject<string>());
                     }
                     if (pattern["$empty"] != null)
                     {
@@ -75,7 +75,7 @@ namespace Toggl_Exist.Matching
                         return IsMatch(prop.Value, value[prop.Name]);
                     });
                 case JTokenType.String:
-                    return pattern.ToObject<string>() == value.ToObject<string>();
+                    return 0 == StringComparer.CurrentCultureIgnoreCase.Compare(pattern.ToObject<string>(), value.ToObject<string>());
                 default:
                     throw new InvalidOperationException($"Expected object; got {pattern.Type}");
             }
