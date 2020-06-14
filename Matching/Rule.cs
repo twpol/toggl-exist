@@ -76,6 +76,16 @@ namespace Toggl_Exist.Matching
                     });
                 case JTokenType.String:
                     return 0 == StringComparer.CurrentCultureIgnoreCase.Compare(pattern.ToObject<string>(), value.ToObject<string>());
+                case JTokenType.Array:
+                    if (value.Type != JTokenType.Array)
+                    {
+                        throw new InvalidOperationException($"Expect array; got {value.Type}");
+                    }
+                    var patternArray = pattern.ToArray();
+                    var valueArray = value.ToArray();
+                    return patternArray.Length == valueArray.Length &&
+                        patternArray.All(p => valueArray.Any(v => IsMatch(p, v))) &&
+                        valueArray.All(v => patternArray.Any(p => IsMatch(p, v)));
                 default:
                     throw new InvalidOperationException($"Expected object; got {pattern.Type}");
             }
