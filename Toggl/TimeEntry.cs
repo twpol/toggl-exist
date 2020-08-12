@@ -11,5 +11,6 @@ namespace Toggl_Exist.Toggl
         public IReadOnlyList<string> matchingTags;
         public DateTimeOffset start;
         public DateTimeOffset end;
+        public TimeSpan duration { get => end - start; }
     }
 }

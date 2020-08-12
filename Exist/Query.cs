@@ -87,5 +87,26 @@ namespace Toggl_Exist.Exist
                 );
             }
         }
+
+        public async Task SetAttribute(DateTimeOffset date, string name, int value)
+        {
+            await Set("attributes/acquire/",
+                new JArray(
+                    new JObject(
+                        new JProperty("name", name),
+                        new JProperty("active", true)
+                    )
+                )
+            );
+            await Set("attributes/update/",
+                new JArray(
+                    new JObject(
+                        new JProperty("name", name),
+                        new JProperty("date", date.ToString("yyyy-MM-dd")),
+                        new JProperty("value", value)
+                    )
+                )
+            );
+        }
     }
 }

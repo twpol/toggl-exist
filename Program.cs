@@ -64,10 +64,23 @@ namespace Toggl_Exist
             var existTags = await exist.GetTags();
             var timeEntries = await toggl.GetDetails(existTags);
 
+            var durations = new Dictionary<string, TimeSpan>();
             var lastDay = DateTime.MinValue;
             foreach (var timeEntry in timeEntries)
             {
                 var day = timeEntry.start.AddMinutes(tzOffset).Date;
+                if (day != lastDay)
+                {
+                    if (durations.Count > 0)
+                    {
+                        Console.WriteLine($"{lastDay.ToString("yyyy-MM-dd")} {String.Join(" ", durations.Select(kvp => $"{kvp.Key} = {kvp.Value.ToString(@"hh\:mm")}"))}");
+                        foreach (var attr in durations.Keys)
+                        {
+                            await exist.SetAttribute(lastDay, attr, (int)durations[attr].TotalMinutes);
+                        }
+                    }
+                    durations.Clear();
+                }
                 var tags = new HashSet<string>();
                 foreach (var rule in rules)
                 {
@@ -90,6 +103,15 @@ namespace Toggl_Exist
                                 }
                             }
                         }
+                        if (rule.Pattern["$set"]["duration_attribute"] != null)
+                        {
+                            var attr = rule.Pattern["$set"]["duration_attribute"].ToObject<string>();
+                            if (!durations.ContainsKey(attr))
+                            {
+                                durations[attr] = TimeSpan.Zero;
+                            }
+                            durations[attr] += timeEntry.duration;
+                        }
                     }
                 }
                 if (lastDay != day && lastDay != DateTime.MinValue) Console.WriteLine("------------------------------");
@@ -97,6 +119,7 @@ namespace Toggl_Exist
                 Console.WriteLine($"{day.ToString("yyyy-MM-dd")} {timeEntry.start.TimeOfDay.ToString(@"hh\:mm")}-{timeEntry.end.TimeOfDay.ToString(@"hh\:mm")} ({(timeEntry.end - timeEntry.start).ToString(@"hh\:mm")}) {timeEntry.project}/{timeEntry.description} [{String.Join(", ", timeEntry.tags)}] --> [{String.Join(", ", tags)}]");
                 await exist.AddTags(day, tags);
             }
+            // Do not set durations here, as they might be incomplete!
         }
     }
 }
