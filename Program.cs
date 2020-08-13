@@ -64,6 +64,7 @@ namespace Toggl_Exist
             var existTags = await exist.GetTags();
             var timeEntries = await toggl.GetDetails(existTags);
 
+            var counts = new Dictionary<string, int>();
             var durations = new Dictionary<string, TimeSpan>();
             var lastDay = DateTime.MinValue;
             foreach (var timeEntry in timeEntries)
@@ -71,6 +72,15 @@ namespace Toggl_Exist
                 var day = timeEntry.start.AddMinutes(tzOffset).Date;
                 if (day != lastDay)
                 {
+                    if (counts.Count > 0)
+                    {
+                        Console.WriteLine($"{lastDay.ToString("yyyy-MM-dd")} {String.Join(" ", counts.Select(kvp => $"{kvp.Key} = {kvp.Value}"))}");
+                        foreach (var attr in counts.Keys)
+                        {
+                            await exist.SetAttribute(lastDay, attr, (int)counts[attr]);
+                        }
+                    }
+                    counts.Clear();
                     if (durations.Count > 0)
                     {
                         Console.WriteLine($"{lastDay.ToString("yyyy-MM-dd")} {String.Join(" ", durations.Select(kvp => $"{kvp.Key} = {kvp.Value.ToString(@"hh\:mm")}"))}");
@@ -102,6 +112,15 @@ namespace Toggl_Exist
                                     tags.Add(tag);
                                 }
                             }
+                        }
+                        if (rule.Pattern["$set"]["count_attribute"] != null)
+                        {
+                            var attr = rule.Pattern["$set"]["count_attribute"].ToObject<string>();
+                            if (!counts.ContainsKey(attr))
+                            {
+                                counts[attr] = 0;
+                            }
+                            counts[attr]++;
                         }
                         if (rule.Pattern["$set"]["duration_attribute"] != null)
                         {
