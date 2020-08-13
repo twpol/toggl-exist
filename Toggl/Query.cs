@@ -16,17 +16,17 @@ namespace Toggl_Exist.Toggl
         const string UserAgent = "Toggl-Exist/1.0";
 
         readonly string Token;
-        readonly string Workspace;
+        readonly IList<string> Workspaces;
 
         HttpClient Client = new HttpClient();
 
-        public Query(string token, string workspace)
+        public Query(string token, IList<string> workspaces)
         {
             Token = token;
-            Workspace = workspace;
+            Workspaces = workspaces;
         }
 
-        internal async Task<JToken> Get(string type, IDictionary<string, string> query)
+        internal async Task<JToken> Get(string type, string workspace, IDictionary<string, string> query)
         {
             var uri = new Uri(
                 Endpoint +
@@ -35,7 +35,7 @@ namespace Toggl_Exist.Toggl
                     QueryHelpers.AddQueryString("", query),
                     new Dictionary<string, string> {
                         { "user_agent", UserAgent },
-                        { "workspace_id", Workspace },
+                        { "workspace_id", workspace },
                         { "order_field", "date" },
                         { "order_desc", "on" },
                     }
@@ -54,8 +54,13 @@ namespace Toggl_Exist.Toggl
 
         public async Task<IReadOnlyList<TimeEntry>> GetDetails(IReadOnlyList<string> matchingTags)
         {
-            var response = await Get("details", new Dictionary<string, string>());
-            var entries = response["data"].ToObject<List<TimeEntry>>();
+            var entries = Workspaces
+                .Select(workspace => Get("details", workspace, new Dictionary<string, string>()))
+                .WaitAll()
+                .SelectMany(response => response["data"].ToObject<List<TimeEntry>>())
+                .OrderBy(entry => entry.start)
+                .Reverse()
+                .ToList();
             foreach (var entry in entries)
             {
                 entry.matchingTags = entry.tags.Where(tag => matchingTags.Contains(tag, StringComparer.CurrentCultureIgnoreCase)).ToList();

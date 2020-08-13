@@ -1,4 +1,4 @@
-﻿using CLP = CommandLineParser;
+using CLP = CommandLineParser;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -53,7 +53,7 @@ namespace Toggl_Exist
         static async Task Main(IConfigurationRoot config, JObject configJson)
         {
             var togglConfig = config.GetSection("Toggl");
-            var toggl = new Toggl.Query(togglConfig["ApiToken"], togglConfig["Workspace"]);
+            var toggl = new Toggl.Query(togglConfig["ApiToken"], togglConfig.GetSection("Workspaces").GetChildren().Select(s => s.Value).ToList());
 
             var existConfig = config.GetSection("Exist");
             var exist = new Exist.Query(existConfig["AccessToken"]);
