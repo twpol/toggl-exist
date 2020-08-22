@@ -1,4 +1,4 @@
-using CLP = CommandLineParser;
+﻿using CLP = CommandLineParser;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -72,24 +72,20 @@ namespace Toggl_Exist
                 var day = timeEntry.start.AddMinutes(tzOffset).Date;
                 if (day != lastDay)
                 {
-                    if (counts.Count > 0)
+                    if (lastDay != DateTime.MinValue)
                     {
                         Console.WriteLine($"{lastDay.ToString("yyyy-MM-dd")} {String.Join(" ", counts.Select(kvp => $"{kvp.Key} = {kvp.Value}"))}");
                         foreach (var attr in counts.Keys)
                         {
                             await exist.SetAttribute(lastDay, attr, (int)counts[attr]);
                         }
-                    }
-                    counts.Clear();
-                    if (durations.Count > 0)
-                    {
                         Console.WriteLine($"{lastDay.ToString("yyyy-MM-dd")} {String.Join(" ", durations.Select(kvp => $"{kvp.Key} = {kvp.Value.ToString(@"hh\:mm")}"))}");
                         foreach (var attr in durations.Keys)
                         {
                             await exist.SetAttribute(lastDay, attr, (int)durations[attr].TotalMinutes);
                         }
                     }
-                    durations.Clear();
+                    ResetAttributes(rules, counts, durations);
                 }
                 var tags = new HashSet<string>();
                 foreach (var rule in rules)
@@ -115,21 +111,11 @@ namespace Toggl_Exist
                         }
                         if (rule.Pattern["$set"]["count_attribute"] != null)
                         {
-                            var attr = rule.Pattern["$set"]["count_attribute"].ToObject<string>();
-                            if (!counts.ContainsKey(attr))
-                            {
-                                counts[attr] = 0;
-                            }
-                            counts[attr]++;
+                            counts[rule.Pattern["$set"]["count_attribute"].ToObject<string>()]++;
                         }
                         if (rule.Pattern["$set"]["duration_attribute"] != null)
                         {
-                            var attr = rule.Pattern["$set"]["duration_attribute"].ToObject<string>();
-                            if (!durations.ContainsKey(attr))
-                            {
-                                durations[attr] = TimeSpan.Zero;
-                            }
-                            durations[attr] += timeEntry.duration;
+                            durations[rule.Pattern["$set"]["duration_attribute"].ToObject<string>()] += timeEntry.duration;
                         }
                     }
                 }
@@ -139,6 +125,23 @@ namespace Toggl_Exist
                 await exist.AddTags(day, tags);
             }
             // Do not set durations here, as they might be incomplete!
+        }
+
+        static void ResetAttributes(IEnumerable<Rule> rules, Dictionary<string, int> counts, Dictionary<string, TimeSpan> durations)
+        {
+            counts.Clear();
+            durations.Clear();
+            foreach (var rule in rules)
+            {
+                if (rule.Pattern["$set"]["count_attribute"] != null)
+                {
+                    counts[rule.Pattern["$set"]["count_attribute"].ToObject<string>()] = 0;
+                }
+                if (rule.Pattern["$set"]["duration_attribute"] != null)
+                {
+                    durations[rule.Pattern["$set"]["duration_attribute"].ToObject<string>()] = TimeSpan.Zero;
+                }
+            }
         }
     }
 }
