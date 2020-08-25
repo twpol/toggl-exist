@@ -52,20 +52,31 @@ namespace Toggl_Exist.Toggl
             return JToken.Parse(text);
         }
 
-        public async Task<IReadOnlyList<TimeEntry>> GetDetails(IReadOnlyList<string> matchingTags)
+        public async Task<IReadOnlyList<TimeEntry>> GetDetails(IReadOnlyList<string> matchingTags, Dictionary<string, string> query)
         {
-            var entries = Workspaces
-                .Select(workspace => Get("details", workspace, new Dictionary<string, string>()))
-                .WaitAll()
-                .SelectMany(response => response["data"].ToObject<List<TimeEntry>>())
-                .OrderBy(entry => entry.start)
-                .Reverse()
-                .ToList();
-            foreach (var entry in entries)
+            var entries = new SortedList<DateTimeOffset, TimeEntry>();
+            foreach (var workspace in Workspaces)
+            {
+                var page = 1;
+                while (true)
+                {
+                    query["page"] = page.ToString();
+                    var response = await Get("details", workspace, query);
+                    var total_count = response["total_count"].ToObject<int>();
+                    var per_page = response["per_page"].ToObject<int>();
+                    foreach (var entry in response["data"].ToObject<List<TimeEntry>>())
+                    {
+                        entries.Add(entry.start, entry);
+                    }
+                    if (total_count <= per_page * page) break;
+                    page++;
+                }
+            }
+            foreach (var entry in entries.Values)
             {
                 entry.matchingTags = entry.tags.Where(tag => matchingTags.Contains(tag, StringComparer.CurrentCultureIgnoreCase)).ToList();
             }
-            return entries;
+            return entries.Values.Reverse().ToList();
         }
     }
 }
