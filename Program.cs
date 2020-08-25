@@ -99,7 +99,7 @@ namespace Toggl_Exist
                         {
                             await exist.SetAttribute(lastDay, attr, (int)durations[attr].TotalMinutes);
                         }
-                        await exist.AddTags(day, tags);
+                        await exist.AddTags(lastDay, tags);
                     }
                     ResetAttributes(rules, counts, durations, tags);
                 }
