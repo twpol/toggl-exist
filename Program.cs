@@ -75,16 +75,14 @@ namespace Toggl_Exist
 
             var maxDay = DateTimeOffset.Now.Date.AddDays(1 - offset);
             var minDay = DateTimeOffset.Now.Date.AddDays(1 - offset - range);
-            Console.WriteLine($"Querying days {offset} --> {offset + range - 1} ({minDay} --> {maxDay})");
+            Console.WriteLine($"Querying days {offset} --> {offset + range - 1} ({minDay.ToString("yyyy-MM-dd")} --> {maxDay.ToString("yyyy-MM-dd")})");
 
             var existTags = await exist.GetTags();
             var togglQuery = new Dictionary<string, string>();
-            if (offset != 0)
-            {
-                togglQuery["since"] = minDay.ToString("yyyy-MM-dd");
-                togglQuery["until"] = maxDay.ToString("yyyy-MM-dd");
-            }
+            togglQuery["since"] = minDay.ToString("yyyy-MM-dd");
+            togglQuery["until"] = maxDay.ToString("yyyy-MM-dd");
             var timeEntries = await toggl.GetDetails(existTags, togglQuery);
+            Console.WriteLine($"Got entries {timeEntries.Last().start} --> {timeEntries.First().end}");
 
             var counts = new Dictionary<string, int>();
             var durations = new Dictionary<string, TimeSpan>();
