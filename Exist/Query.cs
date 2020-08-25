@@ -88,22 +88,30 @@ namespace Toggl_Exist.Exist
             }
         }
 
-        public async Task SetAttribute(DateTimeOffset date, string name, int value)
+        public async Task AcquireAttributes(IEnumerable<string> attributes)
         {
             await Set("attributes/acquire/",
                 new JArray(
-                    new JObject(
-                        new JProperty("name", name),
-                        new JProperty("active", true)
+                    attributes.Select(attribute =>
+                        new JObject(
+                            new JProperty("name", attribute),
+                            new JProperty("active", true)
+                        )
                     )
                 )
             );
+        }
+
+        public async Task SetAttributes(DateTimeOffset date, Dictionary<string, int> attributes)
+        {
             await Set("attributes/update/",
                 new JArray(
-                    new JObject(
-                        new JProperty("name", name),
-                        new JProperty("date", date.ToString("yyyy-MM-dd")),
-                        new JProperty("value", value)
+                    attributes.Select(attribute =>
+                        new JObject(
+                            new JProperty("name", attribute.Key),
+                            new JProperty("date", date.ToString("yyyy-MM-dd")),
+                            new JProperty("value", attribute.Value)
+                        )
                     )
                 )
             );

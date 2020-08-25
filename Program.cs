@@ -88,6 +88,7 @@ namespace Toggl_Exist
             var durations = new Dictionary<string, TimeSpan>();
             var tags = new HashSet<string>();
             ResetAttributes(rules, counts, durations, tags);
+            await exist.AcquireAttributes(counts.Keys);
 
             var lastDay = DateTime.MinValue;
             foreach (var timeEntry in timeEntries)
@@ -144,14 +145,12 @@ namespace Toggl_Exist
         static async Task SetAttributes(Exist.Query exist, DateTime day, Dictionary<string, int> counts, Dictionary<string, TimeSpan> durations, HashSet<string> tags)
         {
             Console.WriteLine($"{day.ToString("yyyy-MM-dd")} {String.Join(" ", counts.Select(kvp => $"{kvp.Key}={kvp.Value}"))} {String.Join(" ", durations.Select(kvp => $"{kvp.Key}={kvp.Value.ToString(@"hh\:mm")}"))} {String.Join(" ", tags.Select(tag => $"tag=\"{tag}\""))}");
-            foreach (var attr in counts.Keys)
-            {
-                await exist.SetAttribute(day, attr, (int)counts[attr]);
-            }
-            foreach (var attr in durations.Keys)
-            {
-                await exist.SetAttribute(day, attr, (int)durations[attr].TotalMinutes);
-            }
+            var attributes = new Dictionary<string, int>(
+                counts.Concat(
+                    durations.Select(kvp => new KeyValuePair<string, int>(kvp.Key, (int)kvp.Value.TotalMinutes))
+                )
+            );
+            await exist.SetAttributes(day, attributes);
             await exist.AddTags(day, tags);
         }
 
