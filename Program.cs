@@ -17,17 +17,25 @@ namespace Toggl_Exist
         {
             var config = new CLP.Arguments.FileArgument('c', "config")
             {
-                ForcedDefaultValue = new FileInfo("config.json")
+                ForcedDefaultValue = new FileInfo("config.json"),
             };
             var verbose = new CLP.Arguments.SwitchArgument('v', "verbose", false);
-            var date = new CLP.Arguments.ValueArgument<int>('d', "date");
+            var offset = new CLP.Arguments.ValueArgument<int>('o', "offset")
+            {
+                ForcedDefaultValue = 0,
+            };
+            var range = new CLP.Arguments.ValueArgument<int>('r', "range")
+            {
+                ForcedDefaultValue = 1,
+            };
 
             var commandLineParser = new CLP.CommandLineParser()
             {
                 Arguments = {
                     config,
                     verbose,
-                    date,
+                    offset,
+                    range,
                 }
             };
 
@@ -37,7 +45,7 @@ namespace Toggl_Exist
 
                 Main(new ConfigurationBuilder()
                     .AddJsonFile(config.Value.FullName, true)
-                    .Build(), LoadConfig(config.Value.FullName), verbose.Value, date.Value)
+                    .Build(), LoadConfig(config.Value.FullName), verbose.Value, offset.Value, range.Value)
                     .Wait();
             }
             catch (CLP.Exceptions.CommandLineException e)
@@ -54,7 +62,7 @@ namespace Toggl_Exist
             }
         }
 
-        static async Task Main(IConfigurationRoot config, JObject configJson, bool verbose, int date)
+        static async Task Main(IConfigurationRoot config, JObject configJson, bool verbose, int offset, int range)
         {
             var togglConfig = config.GetSection("Toggl");
             var toggl = new Toggl.Query(togglConfig["ApiToken"], togglConfig.GetSection("Workspaces").GetChildren().Select(s => s.Value).ToList());
@@ -65,42 +73,33 @@ namespace Toggl_Exist
             var tzOffset = configJson["TimeZoneOffset"].Value<int>();
             var rules = configJson["Rules"].Select(rule => new Rule(rule));
 
+            var maxDay = DateTimeOffset.Now.Date.AddDays(1 - offset);
+            var minDay = DateTimeOffset.Now.Date.AddDays(1 - offset - range);
+            Console.WriteLine($"Querying days {offset} --> {offset + range - 1} ({minDay} --> {maxDay})");
+
             var existTags = await exist.GetTags();
             var togglQuery = new Dictionary<string, string>();
-            var targetDate = date != 0 ? DateTimeOffset.Now.Date.AddDays(-date) : DateTimeOffset.MaxValue;
-            if (date != 0)
+            if (offset != 0)
             {
-                togglQuery["since"] = targetDate.ToString("yyyy-MM-dd");
-                togglQuery["until"] = targetDate.AddDays(1).ToString("yyyy-MM-dd");
+                togglQuery["since"] = minDay.ToString("yyyy-MM-dd");
+                togglQuery["until"] = maxDay.ToString("yyyy-MM-dd");
             }
             var timeEntries = await toggl.GetDetails(existTags, togglQuery);
 
             var counts = new Dictionary<string, int>();
             var durations = new Dictionary<string, TimeSpan>();
             var tags = new HashSet<string>();
+            ResetAttributes(rules, counts, durations, tags);
+
             var lastDay = DateTime.MinValue;
             foreach (var timeEntry in timeEntries)
             {
                 var day = timeEntry.start.AddMinutes(tzOffset).Date;
-                if (day > targetDate)
+                if (day < minDay || day >= maxDay) continue;
+                if (lastDay == DateTime.MinValue) lastDay = day;
+                if (lastDay != day)
                 {
-                    continue;
-                }
-                if (day != lastDay)
-                {
-                    if (lastDay != DateTime.MinValue)
-                    {
-                        Console.WriteLine($"{lastDay.ToString("yyyy-MM-dd")} {String.Join(" ", counts.Select(kvp => $"{kvp.Key}={kvp.Value}"))} {String.Join(" ", durations.Select(kvp => $"{kvp.Key}={kvp.Value.ToString(@"hh\:mm")}"))} {String.Join(" ", tags.Select(tag => $"tag=\"{tag}\""))}");
-                        foreach (var attr in counts.Keys)
-                        {
-                            await exist.SetAttribute(lastDay, attr, (int)counts[attr]);
-                        }
-                        foreach (var attr in durations.Keys)
-                        {
-                            await exist.SetAttribute(lastDay, attr, (int)durations[attr].TotalMinutes);
-                        }
-                        await exist.AddTags(day, tags);
-                    }
+                    await SetAttributes(exist, lastDay, counts, durations, tags);
                     ResetAttributes(rules, counts, durations, tags);
                 }
                 foreach (var rule in rules)
@@ -136,12 +135,26 @@ namespace Toggl_Exist
                 }
                 if (verbose)
                 {
-                    if (day < lastDay) Console.WriteLine("------------------------------");
+                    if (lastDay != day) Console.WriteLine("------------------------------");
                     Console.WriteLine($"{day.ToString("yyyy-MM-dd")} {timeEntry.start.TimeOfDay.ToString(@"hh\:mm")}-{timeEntry.end.TimeOfDay.ToString(@"hh\:mm")} ({(timeEntry.end - timeEntry.start).ToString(@"hh\:mm")}) {timeEntry.project}/{timeEntry.description} [{String.Join(", ", timeEntry.tags)}]");
                 }
                 lastDay = day;
             }
-            // Do not set durations here, as they might be incomplete!
+            await SetAttributes(exist, lastDay, counts, durations, tags);
+        }
+
+        static async Task SetAttributes(Exist.Query exist, DateTime day, Dictionary<string, int> counts, Dictionary<string, TimeSpan> durations, HashSet<string> tags)
+        {
+            Console.WriteLine($"{day.ToString("yyyy-MM-dd")} {String.Join(" ", counts.Select(kvp => $"{kvp.Key}={kvp.Value}"))} {String.Join(" ", durations.Select(kvp => $"{kvp.Key}={kvp.Value.ToString(@"hh\:mm")}"))} {String.Join(" ", tags.Select(tag => $"tag=\"{tag}\""))}");
+            foreach (var attr in counts.Keys)
+            {
+                await exist.SetAttribute(day, attr, (int)counts[attr]);
+            }
+            foreach (var attr in durations.Keys)
+            {
+                await exist.SetAttribute(day, attr, (int)durations[attr].TotalMinutes);
+            }
+            await exist.AddTags(day, tags);
         }
 
         static void ResetAttributes(IEnumerable<Rule> rules, Dictionary<string, int> counts, Dictionary<string, TimeSpan> durations, HashSet<string> tags)
