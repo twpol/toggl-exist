@@ -52,9 +52,8 @@ namespace Toggl_Exist.Toggl
             return JToken.Parse(text);
         }
 
-        public async Task<IReadOnlyList<TimeEntry>> GetDetails(IReadOnlyList<string> matchingTags)
+        public async Task<IReadOnlyList<TimeEntry>> GetDetails(IReadOnlyList<string> matchingTags, Dictionary<string, string> query)
         {
-            var query = new Dictionary<string, string>();
             var entries = new SortedList<DateTimeOffset, TimeEntry>();
             foreach (var workspace in Workspaces)
             {
