@@ -12,7 +12,7 @@ namespace Toggl_Exist.Toggl
 {
     public class Query
     {
-        const string Endpoint = "https://toggl.com/reports/api/v2/";
+        const string Endpoint = "https://api.track.toggl.com/reports/api/v2/";
         const string UserAgent = "Toggl-Exist/1.0";
 
         readonly string Token;
