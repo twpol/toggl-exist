@@ -88,7 +88,6 @@ namespace Toggl_Exist
             var durations = new Dictionary<string, TimeSpan>();
             var tags = new HashSet<string>();
             ResetAttributes(rules, counts, durations, tags);
-            await exist.AcquireAttributes(counts.Keys);
 
             var lastDay = DateTime.MinValue;
             foreach (var timeEntry in timeEntries)
@@ -140,7 +139,15 @@ namespace Toggl_Exist
                 lastDay = day;
             }
             SetAttributes(exist, lastDay, counts, durations, tags);
-            await exist.Save();
+            try
+            {
+                await exist.Save();
+            }
+            catch (InvalidOperationException)
+            {
+                await exist.AcquireAttributes(counts.Keys);
+                await exist.Save();
+            }
         }
 
         static void SetAttributes(Exist.Query exist, DateTime day, Dictionary<string, int> counts, Dictionary<string, TimeSpan> durations, HashSet<string> tags)
