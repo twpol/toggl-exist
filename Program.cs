@@ -88,7 +88,6 @@ namespace Toggl_Exist
             var durations = new Dictionary<string, TimeSpan>();
             var tags = new HashSet<string>();
             ResetAttributes(rules, counts, durations, tags);
-            await exist.AcquireAttributes(counts.Keys);
 
             var lastDay = DateTime.MinValue;
             foreach (var timeEntry in timeEntries)
@@ -98,7 +97,7 @@ namespace Toggl_Exist
                 if (lastDay == DateTime.MinValue) lastDay = day;
                 if (lastDay != day)
                 {
-                    await SetAttributes(exist, lastDay, counts, durations, tags);
+                    SetAttributes(exist, lastDay, counts, durations, tags);
                     ResetAttributes(rules, counts, durations, tags);
                 }
                 foreach (var rule in rules)
@@ -139,10 +138,19 @@ namespace Toggl_Exist
                 }
                 lastDay = day;
             }
-            await SetAttributes(exist, lastDay, counts, durations, tags);
+            SetAttributes(exist, lastDay, counts, durations, tags);
+            try
+            {
+                await exist.Save();
+            }
+            catch (InvalidOperationException)
+            {
+                await exist.AcquireAttributes(counts.Keys);
+                await exist.Save();
+            }
         }
 
-        static async Task SetAttributes(Exist.Query exist, DateTime day, Dictionary<string, int> counts, Dictionary<string, TimeSpan> durations, HashSet<string> tags)
+        static void SetAttributes(Exist.Query exist, DateTime day, Dictionary<string, int> counts, Dictionary<string, TimeSpan> durations, HashSet<string> tags)
         {
             Console.WriteLine($"{day.ToString("yyyy-MM-dd")} {String.Join(" ", counts.Select(kvp => $"{kvp.Key}={kvp.Value}"))} {String.Join(" ", durations.Select(kvp => $"{kvp.Key}={kvp.Value.ToString(@"hh\:mm")}"))} {String.Join(" ", tags.Select(tag => $"tag=\"{tag}\""))}");
             var attributes = new Dictionary<string, int>(
@@ -150,8 +158,8 @@ namespace Toggl_Exist
                     durations.Select(kvp => new KeyValuePair<string, int>(kvp.Key, (int)kvp.Value.TotalMinutes))
                 )
             );
-            await exist.SetAttributes(day, attributes);
-            await exist.AddTags(day, tags);
+            exist.SetAttributes(day, attributes);
+            exist.AddTags(day, tags);
         }
 
         static void ResetAttributes(IEnumerable<Rule> rules, Dictionary<string, int> counts, Dictionary<string, TimeSpan> durations, HashSet<string> tags)

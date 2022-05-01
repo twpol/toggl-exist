@@ -20,6 +20,9 @@ namespace Toggl_Exist.Exist
 
         HttpClient Client = new HttpClient();
 
+        List<Tag> Tags = new();
+        List<Attribute> Attributes = new();
+
         public Query(string token)
         {
             Token = token;
@@ -71,21 +74,9 @@ namespace Toggl_Exist.Exist
                 .ToList();
         }
 
-        public async Task AddTags(DateTimeOffset date, IEnumerable<string> tags)
+        public void AddTags(DateTimeOffset date, IEnumerable<string> tags)
         {
-            if (tags.Count() > 0)
-            {
-                await Set("attributes/custom/append/",
-                    new JArray(
-                        tags.Select(tag =>
-                            new JObject(
-                                new JProperty("date", date.ToString("yyyy-MM-dd")),
-                                new JProperty("value", tag)
-                            )
-                        )
-                    )
-                );
-            }
+            Tags.AddRange(tags.Select(name => new Tag(date, name)));
         }
 
         public async Task AcquireAttributes(IEnumerable<string> attributes)
@@ -102,19 +93,48 @@ namespace Toggl_Exist.Exist
             );
         }
 
-        public async Task SetAttributes(DateTimeOffset date, Dictionary<string, int> attributes)
+        public void SetAttributes(DateTimeOffset date, Dictionary<string, int> attributes)
         {
-            await Set("attributes/update/",
-                new JArray(
-                    attributes.Select(attribute =>
-                        new JObject(
-                            new JProperty("name", attribute.Key),
-                            new JProperty("date", date.ToString("yyyy-MM-dd")),
-                            new JProperty("value", attribute.Value)
+            Attributes.AddRange(attributes.Select(kvp => new Attribute(date, kvp.Key, kvp.Value)));
+        }
+
+        public async Task Save()
+        {
+            if (Tags.Count > 0)
+            {
+                await Set("attributes/custom/append/",
+                    new JArray(
+                        Tags.Select(tag =>
+                            new JObject(
+                                new JProperty("date", tag.Date.ToString("yyyy-MM-dd")),
+                                new JProperty("value", tag.Name)
+                            )
                         )
                     )
-                )
-            );
+                );
+                Tags.Clear();
+            }
+            if (Attributes.Count > 0)
+            {
+                foreach (var chunk in Attributes.Chunk(35))
+                {
+                    await Set("attributes/update/",
+                        new JArray(
+                            chunk.Select(attribute =>
+                                new JObject(
+                                    new JProperty("name", attribute.Name),
+                                    new JProperty("date", attribute.Date.ToString("yyyy-MM-dd")),
+                                    new JProperty("value", attribute.Value)
+                                )
+                            )
+                        )
+                    );
+                }
+                Attributes.Clear();
+            }
         }
+
+        record Tag(DateTimeOffset Date, string Name);
+        record Attribute(DateTimeOffset Date, string Name, int Value);
     }
 }
