@@ -32,9 +32,8 @@
             "args": [
                 "watch",
                 "run",
-                "${workspaceFolder}/Toggl Exist.csproj",
-                "/property:GenerateFullPaths=true",
-                "/consoleloggerparameters:NoSummary"
+                "--project",
+                "${workspaceFolder}/Toggl Exist.csproj"
             ],
             "problemMatcher": "$msCompile"
         }
