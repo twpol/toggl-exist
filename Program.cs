@@ -81,7 +81,7 @@ namespace Toggl_Exist
             var togglQuery = new Dictionary<string, string>();
             togglQuery["since"] = minDay.ToString("yyyy-MM-dd");
             togglQuery["until"] = maxDay.ToString("yyyy-MM-dd");
-            var timeEntries = await toggl.GetDetails(existTags, togglQuery);
+            var timeEntries = await toggl.GetDetails(existTags.Select(tag => tag.Label).ToList(), togglQuery);
             Console.WriteLine($"Got entries {timeEntries.Last().start} --> {timeEntries.First().end}");
 
             var counts = new Dictionary<string, int>();
@@ -97,7 +97,7 @@ namespace Toggl_Exist
                 if (lastDay == DateTime.MinValue) lastDay = day;
                 if (lastDay != day)
                 {
-                    SetAttributes(exist, lastDay, counts, durations, tags);
+                    SetAttributes(exist, lastDay, counts, durations, tags, existTags);
                     ResetAttributes(rules, counts, durations, tags);
                 }
                 foreach (var rule in rules)
@@ -113,12 +113,9 @@ namespace Toggl_Exist
                         }
                         if (rule.Pattern["$set"]["matchingTags"] != null && rule.Pattern["$set"]["matchingTags"].ToObject<bool>() == true)
                         {
-                            foreach (var tag in timeEntry.tags)
+                            foreach (var tag in timeEntry.matchingTags)
                             {
-                                if (existTags.Contains(tag, StringComparer.CurrentCultureIgnoreCase))
-                                {
-                                    tags.Add(tag);
-                                }
+                                tags.Add(tag);
                             }
                         }
                         if (rule.Pattern["$set"]["count_attribute"] != null)
@@ -138,28 +135,27 @@ namespace Toggl_Exist
                 }
                 lastDay = day;
             }
-            SetAttributes(exist, lastDay, counts, durations, tags);
-            try
-            {
-                await exist.Save();
-            }
-            catch (InvalidOperationException)
-            {
-                await exist.AcquireAttributes(counts.Keys);
-                await exist.Save();
-            }
+            SetAttributes(exist, lastDay, counts, durations, tags, existTags);
+            await exist.Save();
         }
 
-        static void SetAttributes(Exist.Query exist, DateTime day, Dictionary<string, int> counts, Dictionary<string, TimeSpan> durations, HashSet<string> tags)
+        static void SetAttributes(Exist.Query exist, DateTime day, Dictionary<string, int> counts, Dictionary<string, TimeSpan> durations, HashSet<string> tags, IEnumerable<Exist.Query.Attribute> existTags)
         {
+            var missingTags = tags.Where(tagLabel => !existTags.Any(tag => string.Equals(tag.Label, tagLabel, StringComparison.CurrentCultureIgnoreCase)));
+            if (missingTags.Any())
+            {
+                throw new InvalidDataException($"Missing tags in Exist: {string.Join(", ", missingTags)}");
+            }
+
             Console.WriteLine($"{day.ToString("yyyy-MM-dd")} {String.Join(" ", counts.Select(kvp => $"{kvp.Key}={kvp.Value}"))} {String.Join(" ", durations.Select(kvp => $"{kvp.Key}={kvp.Value.ToString(@"hh\:mm")}"))} {String.Join(" ", tags.Select(tag => $"tag=\"{tag}\""))}");
             var attributes = new Dictionary<string, int>(
                 counts.Concat(
                     durations.Select(kvp => new KeyValuePair<string, int>(kvp.Key, (int)kvp.Value.TotalMinutes))
+                ).Concat(
+                    tags.Select(tagLabel => existTags.First(tag => string.Equals(tag.Label, tagLabel, StringComparison.CurrentCultureIgnoreCase))).Select(tag => new KeyValuePair<string, int>(tag.Name, 1))
                 )
             );
             exist.SetAttributes(day, attributes);
-            exist.AddTags(day, tags);
         }
 
         static void ResetAttributes(IEnumerable<Rule> rules, Dictionary<string, int> counts, Dictionary<string, TimeSpan> durations, HashSet<string> tags)
