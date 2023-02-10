@@ -13,15 +13,12 @@ namespace Toggl_Exist.Exist
 {
     public class Query
     {
-        const string Endpoint = "https://exist.io/api/1/";
+        const string Endpoint = "https://exist.io/api/2/";
         const string UserAgent = "Toggl-Exist/1.0";
 
         readonly string Token;
-
-        HttpClient Client = new HttpClient();
-
-        List<Tag> Tags = new();
-        List<Attribute> Attributes = new();
+        readonly HttpClient Client = new();
+        readonly List<AttributeValue> Attributes = new();
 
         public Query(string token)
         {
@@ -46,6 +43,19 @@ namespace Toggl_Exist.Exist
             return JToken.Parse(text);
         }
 
+        internal async Task<JToken> GetPaginated(string type)
+        {
+            var results = new List<JToken>();
+            var page = await Get(type);
+            results.AddRange(page["results"].Children());
+            while (page["next"].ToObject<string>() != null)
+            {
+                page = await Get(page["next"].ToObject<string>()[Endpoint.Length..]);
+                results.AddRange(page["results"].Children());
+            }
+            return new JArray(results.ToArray());
+        }
+
         internal async Task<JToken> Set(string type, JToken body)
         {
             var uri = new Uri(Endpoint + type);
@@ -65,76 +75,70 @@ namespace Toggl_Exist.Exist
             return JToken.Parse(text);
         }
 
-        public async Task<IReadOnlyList<string>> GetTags()
+        public async Task<IReadOnlyList<Attribute>> GetTags()
         {
-            var data = await Get("users/$self/attributes/?groups=custom&limit=0");
+            var data = await GetPaginated("attributes/?groups=custom&limit=100");
             return data.Children()
                 .Where(child => child["priority"].ToObject<int>() >= 2)
-                .Select(child => child["label"].ToObject<string>())
+                .Select(child => new Attribute(child["name"].ToObject<string>(), child["label"].ToObject<string>()))
                 .ToList();
-        }
-
-        public void AddTags(DateTimeOffset date, IEnumerable<string> tags)
-        {
-            Tags.AddRange(tags.Select(name => new Tag(date, name)));
-        }
-
-        public async Task AcquireAttributes(IEnumerable<string> attributes)
-        {
-            await Set("attributes/acquire/",
-                new JArray(
-                    attributes.Select(attribute =>
-                        new JObject(
-                            new JProperty("name", attribute),
-                            new JProperty("active", true)
-                        )
-                    )
-                )
-            );
         }
 
         public void SetAttributes(DateTimeOffset date, Dictionary<string, int> attributes)
         {
-            Attributes.AddRange(attributes.Select(kvp => new Attribute(date, kvp.Key, kvp.Value)));
+            Attributes.AddRange(attributes.Select(kvp => new AttributeValue(date, kvp.Key, kvp.Value)));
         }
 
         public async Task Save()
         {
-            if (Tags.Count > 0)
+            try
             {
-                await Set("attributes/custom/append/",
+                await SaveAttributes();
+            }
+            catch (InvalidOperationException)
+            {
+                await AcquireAttributes();
+                await SaveAttributes();
+            }
+        }
+
+        async Task AcquireAttributes()
+        {
+            foreach (var chunk in Attributes.Chunk(35))
+            {
+                await Set("attributes/acquire/",
                     new JArray(
-                        Tags.Select(tag =>
+                        chunk.Select(attribute =>
                             new JObject(
-                                new JProperty("date", tag.Date.ToString("yyyy-MM-dd")),
-                                new JProperty("value", tag.Name)
+                                new JProperty("name", attribute.Name)
                             )
                         )
                     )
                 );
-                Tags.Clear();
-            }
-            if (Attributes.Count > 0)
-            {
-                foreach (var chunk in Attributes.Chunk(35))
-                {
-                    await Set("attributes/update/",
-                        new JArray(
-                            chunk.Select(attribute =>
-                                new JObject(
-                                    new JProperty("name", attribute.Name),
-                                    new JProperty("date", attribute.Date.ToString("yyyy-MM-dd")),
-                                    new JProperty("value", attribute.Value)
-                                )
-                            )
-                        )
-                    );
-                }
-                Attributes.Clear();
             }
         }
 
-        record Tag(DateTimeOffset Date, string Name);
-        record Attribute(DateTimeOffset Date, string Name, int Value);
+        async Task SaveAttributes()
+        {
+            foreach (var chunk in Attributes.Chunk(35))
+            {
+                await Set("attributes/update/",
+                    new JArray(
+                        chunk.Select(attribute =>
+                            new JObject(
+                                new JProperty("name", attribute.Name),
+                                new JProperty("date", attribute.Date.ToString("yyyy-MM-dd")),
+                                new JProperty("value", attribute.Value)
+                            )
+                        )
+                    )
+                );
+            }
+            Attributes.Clear();
+        }
+
+        public record Attribute(string Name, string Label);
+
+        record AttributeValue(DateTimeOffset Date, string Name, int Value);
     }
 }
